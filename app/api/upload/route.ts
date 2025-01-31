@@ -8,6 +8,10 @@ const MAX_TOTAL_SIZE = 50 * 1024 * 1024
 // Allowed file types
 const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
+// New way to configure the route
+export const runtime = 'edge' // 'nodejs' (default) | 'edge'
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
     const accessToken = await getAccessToken()
@@ -124,14 +128,8 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Upload error:', error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Upload failed' },
+      { error: error instanceof Error ? error.message : 'Upload failed' },
       { status: 500 }
     )
   }
-}
-
-export const config = {
-  api: {
-    bodyParser: false,
-  },
 } 
