@@ -19,6 +19,8 @@ export async function POST(request: NextRequest) {
     const folderId = formData.get('folderId') as string
     const files = formData.getAll('files') as File[]
 
+    console.log('Received upload request for folder ID:', folderId);
+
     // Validate folder ID
     if (!folderId) {
       return NextResponse.json(
@@ -71,6 +73,7 @@ export async function POST(request: NextRequest) {
           parents: [folderId],
           mimeType: file.type,
         }
+        console.log('Creating metadata for file:', file.name);
 
         const metadataResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
           method: 'POST',
@@ -82,10 +85,13 @@ export async function POST(request: NextRequest) {
         })
 
         if (!metadataResponse.ok) {
-          throw new Error(`Failed to create metadata for ${file.name}`)
+          const errorText = await metadataResponse.text();
+          console.error(`Failed to create metadata for ${file.name} with status:`, metadataResponse.status, "and message:", errorText);
+          throw new Error(`Failed to create metadata for ${file.name}: ${errorText}`);
         }
 
         const { id } = await metadataResponse.json()
+        console.log('Metadata created successfully for file:', file.name, 'with ID:', id);
 
         // Upload file content with progress tracking
         const arrayBuffer = await file.arrayBuffer()
@@ -102,8 +108,11 @@ export async function POST(request: NextRequest) {
         )
 
         if (!uploadResponse.ok) {
-          throw new Error(`Failed to upload content for ${file.name}`)
+          const errorText = await uploadResponse.text();
+          console.error(`Failed to upload content for ${file.name} with status:`, uploadResponse.status, "and message:", errorText);
+          throw new Error(`Failed to upload content for ${file.name}: ${errorText}`);
         }
+        console.log('Content uploaded successfully for file:', file.name);
 
         return uploadResponse.json()
       } catch (error) {

@@ -1,78 +1,98 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Upload } from "lucide-react"
-import { useToast } from "@/components/ui/use-toast"
+import { LoginDialog } from "@/components/login-dialog"
 
-interface UploadButtonProps {
-  folderId: string
-  onUploadComplete: () => void
-}
+export function UploadButton() {
+  const [isLoginOpen, setIsLoginOpen] = useState(false)
+  const [authToken, setAuthToken] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-export function UploadButton({ folderId, onUploadComplete }: UploadButtonProps) {
-  const [isUploading, setIsUploading] = useState(false)
-  const { toast } = useToast()
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!event.target.files || !authToken) return
 
-  const handleUpload = async (files: FileList | null) => {
-    if (!files || files.length === 0) return
-
-    setIsUploading(true)
     const formData = new FormData()
+    
+    // Get the current folder ID from the URL or use the default folder
+    const pathParts = window.location.pathname.split('/')
+    const currentFolderId = pathParts[pathParts.length - 1]
+    const defaultFolderId = '1FvlMjudh-fspS6yo3vpgaw2CW7naskF7' // Your default folder ID
+    
+    // Use the current folder ID if it exists, otherwise use the default
+    const folderId = currentFolderId && currentFolderId !== '' ? currentFolderId : defaultFolderId
+    
+    // Now we're sure folderId is a string
     formData.append('folderId', folderId)
-
-    // Add all files to formData
-    Array.from(files).forEach(file => {
-      formData.append('files', file)
-    })
-
+    
+    console.log('Uploading to folder ID:', folderId)
+    
+    for (const file of event.target.files) {
+      formData.append("files", file)
+    }
+    
     try {
-      const response = await fetch('/api/upload', {
-        method: 'POST',
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${authToken}`
+        },
         body: formData,
       })
 
       if (!response.ok) {
-        throw new Error('Upload failed')
+        const errorText = await response.text()
+        console.error("Upload failed with status:", response.status, "and message:", errorText)
+        throw new Error(`Upload failed: ${errorText}`)
       }
 
-      toast({
-        title: "Success",
-        description: "Files uploaded successfully",
-      })
-      
-      onUploadComplete()
+      // Refresh the page or update the gallery
+      window.location.reload()
     } catch (error) {
-      console.error('Upload error:', error)
-      toast({
-        title: "Error",
-        description: "Failed to upload files",
-        variant: "destructive",
-      })
-    } finally {
-      setIsUploading(false)
+      console.error("Upload error:", error)
+      alert("Failed to upload files. Please try again.")
     }
   }
 
+  const handleClick = () => {
+    if (!authToken) {
+      setIsLoginOpen(true)
+      return
+    }
+    // Trigger file input click when authenticated
+    fileInputRef.current?.click()
+  }
+
+  const handleLogin = (token: string) => {
+    setAuthToken(token)
+    // Automatically trigger file selection after successful login
+    setTimeout(() => {
+      fileInputRef.current?.click()
+    }, 100)
+  }
+
   return (
-    <div className="relative">
+    <>
+      <Button onClick={handleClick}>
+        <Upload className="mr-2 h-4 w-4" />
+        Upload Images
+      </Button>
+
+      <LoginDialog
+        isOpen={isLoginOpen}
+        onClose={() => setIsLoginOpen(false)}
+        onLogin={handleLogin}
+      />
+
       <input
+        ref={fileInputRef}
         type="file"
         multiple
         accept="image/*"
-        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-        onChange={(e) => handleUpload(e.target.files)}
-        disabled={isUploading}
+        className="hidden"
+        onChange={handleFileUpload}
       />
-      <Button
-        variant="outline"
-        size="sm"
-        className={`w-full ${isUploading ? 'opacity-50' : ''}`}
-        disabled={isUploading}
-      >
-        <Upload className="h-4 w-4 mr-2" />
-        {isUploading ? 'Uploading...' : 'Upload Images'}
-      </Button>
-    </div>
+    </>
   )
 } 
