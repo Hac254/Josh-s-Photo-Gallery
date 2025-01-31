@@ -29,7 +29,7 @@ function urlsafeBase64(obj: object): string {
   return base64ToBase64url(Buffer.from(JSON.stringify(obj)).toString("base64"))
 }
 
-function createJWT() {
+async function createJWT() {
   const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n")
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL
 
@@ -60,10 +60,31 @@ function createJWT() {
   const encodedClaimSet = urlsafeBase64(claimSet)
   const signatureInput = `${encodedHeader}.${encodedClaimSet}`
 
-  const crypto = require("crypto")
-  const signer = crypto.createSign("RSA-SHA256")
-  signer.update(signatureInput)
-  const signature = base64ToBase64url(signer.sign(privateKey, "base64"))
+  // Convert private key to CryptoKey
+  const binaryKey = Buffer.from(privateKey, 'utf-8')
+  const cryptoKey = await crypto.subtle.importKey(
+    'pkcs8',
+    binaryKey,
+    {
+      name: 'RSASSA-PKCS1-v1_5',
+      hash: 'SHA-256',
+    },
+    false,
+    ['sign']
+  )
+
+  // Sign the input
+  const encoder = new TextEncoder()
+  const signatureBytes = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5',
+    cryptoKey,
+    encoder.encode(signatureInput)
+  )
+
+  // Convert signature to base64url
+  const signature = base64ToBase64url(
+    Buffer.from(signatureBytes).toString('base64')
+  )
 
   return `${signatureInput}.${signature}`
 }
@@ -75,7 +96,7 @@ export async function getAccessToken() {
   const now = Date.now()
   if (!cachedToken || now >= tokenExpiry) {
     try {
-      const jwt = createJWT()
+      const jwt = await createJWT()
 
       const response = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",

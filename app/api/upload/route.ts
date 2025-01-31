@@ -9,7 +9,7 @@ const MAX_TOTAL_SIZE = 50 * 1024 * 1024
 const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
 // New way to configure the route
-export const runtime = 'edge' // 'nodejs' (default) | 'edge'
+export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
