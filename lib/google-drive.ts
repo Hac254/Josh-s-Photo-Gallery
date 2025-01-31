@@ -47,8 +47,9 @@ function createJWT() {
   const claimSet = {
     iss: clientEmail,
     scope: [
-      "https://www.googleapis.com/auth/drive.file",  // For file operations
-      "https://www.googleapis.com/auth/drive.metadata.readonly"  // For reading metadata
+      "https://www.googleapis.com/auth/drive",
+      "https://www.googleapis.com/auth/drive.readonly",
+      "https://www.googleapis.com/auth/drive.metadata.readonly"
     ].join(' '),
     aud: "https://oauth2.googleapis.com/token",
     exp: now + 3600,
@@ -159,11 +160,7 @@ interface DriveApiFile {
 }
 
 export function getImageUrl(fileId: string, thumbnail = false) {
-  if (thumbnail) {
-    // Use a more reliable thumbnail URL format
-    return `/api/image/${fileId}?thumbnail=true`
-  }
-  // Use our proxy endpoint for full-size images
+  // Always use the direct file endpoint
   return `/api/image/${fileId}`
 }
 
