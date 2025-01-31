@@ -96,8 +96,13 @@ export async function getAccessToken() {
   const now = Date.now()
   if (!cachedToken || now >= tokenExpiry) {
     try {
+      // Debug logging
+      console.log('Creating new access token...')
+      console.log('Client email:', process.env.GOOGLE_CLIENT_EMAIL)
+      console.log('Private key length:', process.env.GOOGLE_PRIVATE_KEY?.length)
+      
       const jwt = await createJWT()
-
+      
       const response = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: {
@@ -110,11 +115,14 @@ export async function getAccessToken() {
       })
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: { message: response.statusText } }))
-        throw new Error(error.error?.message || "Failed to get access token")
+        const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }))
+        console.error('Token response error:', errorData)
+        throw new Error(errorData.error?.message || "Failed to get access token")
       }
 
       const data = await response.json()
+      console.log('Successfully obtained access token')
+      
       cachedToken = data.access_token
       tokenExpiry = now + 3500000 // Set expiry to slightly less than 1 hour
     } catch (error) {
