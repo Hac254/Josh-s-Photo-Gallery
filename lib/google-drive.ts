@@ -30,12 +30,24 @@ function urlsafeBase64(obj: object): string {
 }
 
 async function createJWT() {
-  const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n")
+  let privateKey = process.env.GOOGLE_PRIVATE_KEY || ''
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL
 
-  if (!privateKey || !clientEmail) {
-    throw new Error("Missing Google credentials")
+  // Handle different private key formats
+  if (privateKey.includes('\\n')) {
+    privateKey = privateKey.replace(/\\n/g, '\n')
   }
+  
+  if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+    throw new Error('Invalid private key format')
+  }
+
+  if (!clientEmail) {
+    throw new Error('Missing client email')
+  }
+
+  console.log('Private key starts with:', privateKey.substring(0, 40))
+  console.log('Private key format valid:', privateKey.includes('-----BEGIN PRIVATE KEY-----'))
 
   const now = Math.floor(Date.now() / 1000)
 
@@ -46,11 +58,7 @@ async function createJWT() {
 
   const claimSet = {
     iss: clientEmail,
-    scope: [
-      "https://www.googleapis.com/auth/drive",
-      "https://www.googleapis.com/auth/drive.readonly",
-      "https://www.googleapis.com/auth/drive.metadata.readonly"
-    ].join(' '),
+    scope: "https://www.googleapis.com/auth/drive.readonly",
     aud: "https://oauth2.googleapis.com/token",
     exp: now + 3600,
     iat: now,
@@ -60,33 +68,46 @@ async function createJWT() {
   const encodedClaimSet = urlsafeBase64(claimSet)
   const signatureInput = `${encodedHeader}.${encodedClaimSet}`
 
-  // Convert private key to CryptoKey
-  const binaryKey = Buffer.from(privateKey, 'utf-8')
-  const cryptoKey = await crypto.subtle.importKey(
-    'pkcs8',
-    binaryKey,
-    {
-      name: 'RSASSA-PKCS1-v1_5',
-      hash: 'SHA-256',
-    },
-    false,
-    ['sign']
-  )
+  try {
+    // Remove header and footer from private key
+    const pemContent = privateKey
+      .replace('-----BEGIN PRIVATE KEY-----', '')
+      .replace('-----END PRIVATE KEY-----', '')
+      .replace(/\s/g, '')
 
-  // Sign the input
-  const encoder = new TextEncoder()
-  const signatureBytes = await crypto.subtle.sign(
-    'RSASSA-PKCS1-v1_5',
-    cryptoKey,
-    encoder.encode(signatureInput)
-  )
+    // Convert to binary
+    const binaryKey = Buffer.from(pemContent, 'base64')
+    
+    // Import the key
+    const cryptoKey = await crypto.subtle.importKey(
+      'pkcs8',
+      binaryKey,
+      {
+        name: 'RSASSA-PKCS1-v1_5',
+        hash: 'SHA-256',
+      },
+      false,
+      ['sign']
+    )
 
-  // Convert signature to base64url
-  const signature = base64ToBase64url(
-    Buffer.from(signatureBytes).toString('base64')
-  )
+    // Sign the input
+    const encoder = new TextEncoder()
+    const signatureBytes = await crypto.subtle.sign(
+      'RSASSA-PKCS1-v1_5',
+      cryptoKey,
+      encoder.encode(signatureInput)
+    )
 
-  return `${signatureInput}.${signature}`
+    // Convert signature to base64url
+    const signature = base64ToBase64url(
+      Buffer.from(signatureBytes).toString('base64')
+    )
+
+    return `${signatureInput}.${signature}`
+  } catch (error) {
+    console.error('JWT creation error:', error)
+    throw new Error(`Failed to create JWT: ${error instanceof Error ? error.message : 'Unknown error'}`)
+  }
 }
 
 let cachedToken: string | null = null
@@ -96,12 +117,10 @@ export async function getAccessToken() {
   const now = Date.now()
   if (!cachedToken || now >= tokenExpiry) {
     try {
-      // Debug logging
       console.log('Creating new access token...')
-      console.log('Client email:', process.env.GOOGLE_CLIENT_EMAIL)
-      console.log('Private key length:', process.env.GOOGLE_PRIVATE_KEY?.length)
       
       const jwt = await createJWT()
+      console.log('JWT created successfully')
       
       const response = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
@@ -114,20 +133,21 @@ export async function getAccessToken() {
         }),
       })
 
+      const responseText = await response.text()
+      console.log('Token response:', responseText)
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }))
-        console.error('Token response error:', errorData)
-        throw new Error(errorData.error?.message || "Failed to get access token")
+        throw new Error(`Token request failed: ${responseText}`)
       }
 
-      const data = await response.json()
-      console.log('Successfully obtained access token')
+      const data = JSON.parse(responseText)
+      console.log('Access token obtained')
       
       cachedToken = data.access_token
       tokenExpiry = now + 3500000 // Set expiry to slightly less than 1 hour
     } catch (error) {
       console.error("Error getting access token:", error)
-      throw new Error("Failed to authenticate with Google Drive")
+      throw error
     }
   }
 
