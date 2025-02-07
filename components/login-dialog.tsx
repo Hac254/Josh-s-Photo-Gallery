@@ -52,7 +52,7 @@ export function LoginDialog({ isOpen, onClose, onLogin }: LoginDialogProps) {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Admin Login</DialogTitle>
+          <DialogTitle>Admin Login😎 </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
